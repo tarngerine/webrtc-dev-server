@@ -45,7 +45,7 @@ wss.on("connection", function connection(ws) {
   });
 });
 
-const port = process.env.NODE_ENV === "production" ? 3000 : 3001;
+const port = process.env.NODE_ENV === "production" ? 80 : 3001;
 server.listen(port, () => {
   console.log(`Listening on port ${port}`);
 });
