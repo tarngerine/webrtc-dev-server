@@ -1,0 +1,24 @@
+{
+  "name": "webrtc-dev-server",
+  "version": "1.0.0",
+  "description": "A simple webrtc server to host for development",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holium/webrtc-dev-server.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/holium/webrtc-dev-server/issues"
+  },
+  "homepage": "https://github.com/holium/webrtc-dev-server#readme",
+  "dependencies": {
+    "express": "^4.18.1",
+    "ws": "^8.7.0"
+  }
+}
