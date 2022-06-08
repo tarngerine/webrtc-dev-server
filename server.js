@@ -6,35 +6,89 @@ const express = require("express"),
 
 const wss = new WebSocket.Server({ server, path: "/ws" });
 
-const clients = {}; // Record<UUID, WebSocket>
+// A room in websocket is a generic concept: a pool of sockets that broadcast to each other
+// this follows common language in popular libraries like socket.io
+// A websocket can request to be moved to a room, or be in multiple rooms at once
+// In Realm terms, we can use a room for Realm Rooms OR Channels... just providing their ID as the websocket room ID
+
+// Store references to each socket
+// Record<SocketID, WebSocket>
+let socketIdInc = 0;
+const sockets = {};
+// Record<RoomID, Set<SocketID>>
+const rooms = {};
 
 wss.on("connection", function connection(ws) {
-  ws.on("message", function incoming(message) {
-    console.log("received: %s", message);
+  // Store the socket
+  const wsId = socketIdInc++;
+  sockets[wsId] = ws;
+  console.log("New websocket connection:", wsId);
 
-    // When a new user joins, pick another user to sync data over
+  ws.on("message", function incoming(message) {
+    // console.log("received: %s", message);
+
     try {
       const payload = JSON.parse(message);
-      console.log("message parsed", JSON.stringify(payload, null, 2));
+      // console.log("message parsed", JSON.stringify(payload, null, 2));
 
-      // interface Payload {
-      //   event: "join";
-      //   id: string;
-      // }
-      if (payload.event === "join") {
-        // store client by client generated ID
-        clients[payload.id] = ws;
+      switch (payload.event) {
+        // interface JoinPayload {
+        //   event: "join";
+        //   roomId: string;
+        // }
+        case "join": {
+          // create a set for room if it doesn't exist
+          rooms[payload.roomId] = rooms[payload.roomId] || new Set();
+          // add the socket to the room
+          rooms[payload.roomId].add(wsId);
+          console.log("Socket", wsId, "joined room", payload.roomId);
 
-        // Cleanup handler
-        ws.on("close", () => {
-          delete clients[payload.id];
-        });
+          // Cleanup handler when socket closes
+          ws.on("close", () => {
+            rooms[payload.roomId].delete(wsId);
+            console.log("Socket", wsId, "closed");
+            // Clean up room if empty
+            if (rooms[payload.roomId].size === 0) {
+              delete rooms[payload.roomId];
+            }
+          });
+          break;
+        }
+        // interface LeavePayload {
+        //   event: "leave";
+        //   roomId: string;
+        // }
+        case "leave": {
+          rooms[payload.roomId].delete(wsId);
+          console.log("Socket", wsId, "left room", payload.roomId);
+          // Clean up room if empty
+          if (rooms[payload.roomId].size === 0) {
+            delete rooms[payload.roomId];
+          }
+          break;
+        }
       }
 
-      wss.clients.forEach((client) => {
-        // dont send payload back to the same client
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(payload));
+      // Pass through payloads to other sockets in the same room as this one
+      // Find all rooms with this socketId
+      const roomsWithSocket = Object.keys(rooms).filter((roomId) =>
+        rooms[roomId].has(wsId)
+      );
+      // Find all other sockets in those rooms
+      const otherSocketIds = roomsWithSocket.reduce((acc, roomId) => {
+        acc.push(
+          ...rooms[roomId]
+          // TEMPORARY: send payload back to current client to test
+          // .filter((socketId) => socketId !== wsId)
+        );
+        return acc;
+      }, []);
+      const otherSockets = otherSocketIds.map((socketId) => sockets[socketId]);
+
+      // Send the message to all other sockets
+      otherSockets.forEach((socket) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(payload));
         }
       });
     } catch (e) {
